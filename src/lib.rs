@@ -40,3 +40,29 @@ pub mod spatial;
 pub mod config;
 pub mod observer;
 pub mod error;
+
+// Re-export primary API
+pub use float::Float;
+pub use vec::{Vec, Scalar, Vec2, Vec3};
+pub use agent::Agent;
+pub use steering::{SteeringOutput, apply_steering};
+pub use seek::{seek, flee, arrive};
+pub use pursue::{pursue, evade};
+pub use wander::{WanderParams, WanderState, wander_2d, wander_3d};
+pub use separation::separation;
+pub use alignment::alignment;
+pub use cohesion::cohesion;
+pub use flock::{FlockWeights, flock};
+pub use avoid::{Circle, Aabb, Wall, avoid_circles, avoid_aabbs, avoid_walls};
+pub use path::{Path, path_follow};
+pub use flow::{FlowField, generate_toward, flow_follow};
+pub use formation::{
+    FormationSlot, FormationPattern, Formation,
+    CircleFormation, VFormation, GridFormation, ColumnFormation, LeaderFollow,
+    steer_to_slot,
+};
+pub use combine::{WeightedBehavior, weighted_blend, priority_select, BehaviorPipeline};
+pub use spatial::{NeighborInfo, SpatialQuery, BruteForceQuery};
+pub use config::FlockConfig;
+pub use observer::{SteeringObserver, NoOpSteeringObserver};
+pub use error::SteeringError;
