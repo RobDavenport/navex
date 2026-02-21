@@ -1,0 +1,30 @@
+[workspace]
+members = ["demo-wasm"]
+resolver = "3"
+
+[package]
+name = "navex"
+version = "0.1.0"
+edition = "2024"
+description = "Composable steering behaviors, flocking, flow fields, and formations for games"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "navex"
+path = "src/lib.rs"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+rand_core = { version = "0.6", default-features = false }
+libm = "0.2"
+
+[dev-dependencies]
+rand = { version = "0.8", features = ["small_rng"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "steering"
+harness = false
