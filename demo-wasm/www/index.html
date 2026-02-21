@@ -3,19 +3,251 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>navex — Steering Behaviors &amp; Flocking Demo</title>
+    <title>navex -- Steering Behaviors &amp; Flocking Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: #eee;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        header h1 {
+            font-size: 28px;
+            color: #4af;
+            letter-spacing: 2px;
+        }
+        header p {
+            font-size: 13px;
+            color: #889;
+            margin-top: 2px;
+        }
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .tab-btn {
+            background: #16213e;
+            border: 1px solid #333;
+            color: #aab;
+            padding: 8px 16px;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .tab-btn:hover { background: #1a2744; color: #dde; }
+        .tab-btn.active {
+            background: #0f3460;
+            color: #4af;
+            border-color: #4af;
+            border-bottom-color: #0f3460;
+        }
+        .main-area {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        canvas {
+            background: #0f0f23;
+            border: 1px solid #333;
+            border-radius: 4px;
+            cursor: crosshair;
+        }
+        .controls {
+            background: #16213e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 16px;
+            min-width: 200px;
+            max-width: 220px;
+        }
+        .controls h3 {
+            color: #4af;
+            font-size: 14px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+        .control-panel { display: none; }
+        .control-panel.active { display: block; }
+        .control-group {
+            margin-bottom: 12px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #889;
+            margin-bottom: 4px;
+        }
+        .control-group .val {
+            float: right;
+            color: #4af;
+            font-size: 11px;
+            font-family: monospace;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #4af;
+            margin-top: 2px;
+        }
+        select {
+            width: 100%;
+            background: #0f0f23;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        button.ctrl-btn {
+            background: #0f3460;
+            border: 1px solid #4af;
+            color: #4af;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 6px;
+            margin-top: 4px;
+            transition: background 0.15s;
+        }
+        button.ctrl-btn:hover { background: #1a4a80; }
+        .info-text {
+            font-size: 11px;
+            color: #667;
+            line-height: 1.5;
+            margin-top: 8px;
+        }
+        .stats {
+            font-size: 11px;
+            color: #556;
+            text-align: center;
+            margin-top: 8px;
+        }
+    </style>
 </head>
 <body>
     <header>
         <h1>navex</h1>
-        <p>Composable steering behaviors &amp; flocking</p>
+        <p>Composable steering behaviors, flocking, flow fields &amp; formations</p>
     </header>
-    <main>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="flocking">Flocking</button>
+        <button class="tab-btn" data-tab="steering">Steering</button>
+        <button class="tab-btn" data-tab="obstacles">Obstacles</button>
+        <button class="tab-btn" data-tab="flowfield">Flow Field</button>
+        <button class="tab-btn" data-tab="formations">Formations</button>
+    </div>
+
+    <div class="main-area">
         <canvas id="canvas" width="800" height="600"></canvas>
-    </main>
-    <script type="module">
-        import init from '../pkg/navex_demo.js';
-        init();
-    </script>
+
+        <div class="controls">
+            <!-- Flocking Controls -->
+            <div class="control-panel active" id="panel-flocking">
+                <h3>Flocking</h3>
+                <div class="control-group">
+                    <label>Separation <span class="val" id="sep-val">1.5</span></label>
+                    <input type="range" id="sep" min="0" max="3" step="0.1" value="1.5">
+                </div>
+                <div class="control-group">
+                    <label>Alignment <span class="val" id="ali-val">1.0</span></label>
+                    <input type="range" id="ali" min="0" max="3" step="0.1" value="1.0">
+                </div>
+                <div class="control-group">
+                    <label>Cohesion <span class="val" id="coh-val">1.0</span></label>
+                    <input type="range" id="coh" min="0" max="3" step="0.1" value="1.0">
+                </div>
+                <p class="info-text">
+                    200 boids with Reynolds flocking.
+                    Adjust separation, alignment, and cohesion weights.
+                </p>
+            </div>
+
+            <!-- Steering Controls -->
+            <div class="control-panel" id="panel-steering">
+                <h3>Steering</h3>
+                <div class="control-group">
+                    <label>Behavior</label>
+                    <select id="behavior-select">
+                        <option value="0">Seek</option>
+                        <option value="1">Arrive</option>
+                        <option value="2">Wander</option>
+                        <option value="3">Pursue</option>
+                        <option value="4">Evade</option>
+                    </select>
+                </div>
+                <p class="info-text">
+                    Click canvas to set target.<br>
+                    <b>Seek</b>: Full speed toward target.<br>
+                    <b>Arrive</b>: Decelerate near target.<br>
+                    <b>Wander</b>: Autonomous wandering.<br>
+                    <b>Pursue/Evade</b>: Predict moving target.
+                </p>
+            </div>
+
+            <!-- Obstacles Controls -->
+            <div class="control-panel" id="panel-obstacles">
+                <h3>Obstacles</h3>
+                <div class="control-group">
+                    <button class="ctrl-btn" id="add-circle-btn">Add Circle</button>
+                    <button class="ctrl-btn" id="clear-circles-btn">Clear</button>
+                </div>
+                <p class="info-text">
+                    Click canvas to set seek target.<br>
+                    Hold <b>Shift + click</b> to place obstacles.<br>
+                    20 agents seek target while avoiding circular obstacles.
+                </p>
+            </div>
+
+            <!-- Flow Field Controls -->
+            <div class="control-panel" id="panel-flowfield">
+                <h3>Flow Field</h3>
+                <p class="info-text">
+                    Click canvas to set flow target.<br>
+                    <b>Shift + click</b> to toggle blocked cells.<br>
+                    BFS generates directions toward the target.
+                    50 agents follow the field.
+                </p>
+            </div>
+
+            <!-- Formations Controls -->
+            <div class="control-panel" id="panel-formations">
+                <h3>Formations</h3>
+                <div class="control-group">
+                    <label>Pattern</label>
+                    <select id="pattern-select">
+                        <option value="0">Circle</option>
+                        <option value="1">V (Chevron)</option>
+                        <option value="2">Grid</option>
+                        <option value="3">Column</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Radius <span class="val" id="radius-val">60</span></label>
+                    <input type="range" id="formation-radius" min="20" max="150" step="5" value="60">
+                </div>
+                <p class="info-text">
+                    Click canvas to move leader.<br>
+                    12 followers arrange into formation patterns around the leader.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats" id="stats">Loading WASM...</div>
+
+    <script type="module" src="main.js"></script>
 </body>
 </html>
