@@ -46,7 +46,7 @@ pub trait Vec: Copy + Clone + Default + core::fmt::Debug {
     fn truncate(self, max_length: Self::Scalar) -> Self {
         let len_sq = self.length_sq();
         if len_sq > max_length * max_length {
-            self.normalize().scale(max_length)
+            self.normalize_or_zero().scale(max_length)
         } else {
             self
         }
