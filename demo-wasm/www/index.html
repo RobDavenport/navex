@@ -122,6 +122,7 @@
             transition: background 0.15s;
         }
         button.ctrl-btn:hover { background: #1a4a80; }
+        button.ctrl-btn.active { background: #f44; color: #fff; border-color: #f44; }
         .info-text {
             font-size: 11px;
             color: #667;
@@ -169,9 +170,14 @@
                     <label>Cohesion <span class="val" id="coh-val">1.0</span></label>
                     <input type="range" id="coh" min="0" max="3" step="0.1" value="1.0">
                 </div>
+                <div class="control-group">
+                    <button class="ctrl-btn" id="predator-btn">Predator</button>
+                    <button class="ctrl-btn" id="clear-points-btn">Clear Points</button>
+                </div>
                 <p class="info-text">
                     200 boids with Reynolds flocking.
-                    Adjust separation, alignment, and cohesion weights.
+                    Adjust separation, alignment, and cohesion weights.<br>
+                    <b>Click</b> to add attractor. <b>Right-click</b> to add repulsor.
                 </p>
             </div>
 
@@ -204,10 +210,15 @@
                     <button class="ctrl-btn" id="add-circle-btn">Add Circle</button>
                     <button class="ctrl-btn" id="clear-circles-btn">Clear</button>
                 </div>
+                <div class="control-group">
+                    <button class="ctrl-btn" id="add-aabb-btn">Add AABB</button>
+                    <button class="ctrl-btn" id="clear-aabbs-btn">Clear AABBs</button>
+                </div>
                 <p class="info-text">
                     Click canvas to set seek target.<br>
-                    Hold <b>Shift + click</b> to place obstacles.<br>
-                    20 agents seek target while avoiding circular obstacles.
+                    Hold <b>Shift + click</b> to place circle obstacles.<br>
+                    Hold <b>Shift + right-click</b> to place AABB obstacles.<br>
+                    20 agents seek target while avoiding obstacles.
                 </p>
             </div>
 
@@ -237,6 +248,10 @@
                 <div class="control-group">
                     <label>Radius <span class="val" id="radius-val">60</span></label>
                     <input type="range" id="formation-radius" min="20" max="150" step="5" value="60">
+                </div>
+                <div class="control-group">
+                    <label>Slowing Radius <span class="val" id="slowing-val">40</span></label>
+                    <input type="range" id="slowing-radius" min="10" max="100" step="5" value="40">
                 </div>
                 <p class="info-text">
                     Click canvas to move leader.<br>

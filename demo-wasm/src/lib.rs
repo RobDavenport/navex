@@ -31,6 +31,10 @@ fn rand_range(rng: &mut SmallRng, lo: f32, hi: f32) -> f32 {
 pub struct FlockingDemo {
     agents: AllocVec<Agent<Vec2<f32>>>,
     weights: FlockWeights<f32>,
+    attractors: AllocVec<Vec2<f32>>,
+    repulsors: AllocVec<Vec2<f32>>,
+    predator: Agent<Vec2<f32>>,
+    predator_enabled: bool,
     width: f32,
     height: f32,
 }
@@ -49,9 +53,20 @@ impl FlockingDemo {
                 Agent::new(Vec2::new(x, y), vel, 1.0, 100.0, 200.0)
             })
             .collect();
+        let predator = Agent::new(
+            Vec2::new(width * 0.5, height * 0.5),
+            Vec2::new(30.0, 20.0),
+            1.0,
+            70.0,
+            150.0,
+        );
         Self {
             agents,
             weights: FlockWeights::default_reynolds(),
+            attractors: AllocVec::new(),
+            repulsors: AllocVec::new(),
+            predator,
+            predator_enabled: false,
             width,
             height,
         }
@@ -59,6 +74,40 @@ impl FlockingDemo {
 
     pub fn set_weights(&mut self, sep: f32, ali: f32, coh: f32) {
         self.weights = FlockWeights::new(sep, ali, coh);
+    }
+
+    pub fn add_attractor(&mut self, x: f32, y: f32) {
+        self.attractors.push(Vec2::new(x, y));
+    }
+
+    pub fn add_repulsor(&mut self, x: f32, y: f32) {
+        self.repulsors.push(Vec2::new(x, y));
+    }
+
+    pub fn clear_points(&mut self) {
+        self.attractors.clear();
+        self.repulsors.clear();
+    }
+
+    pub fn attractor_data(&self) -> AllocVec<f32> {
+        self.attractors.iter().flat_map(|a| [a.x, a.y]).collect()
+    }
+
+    pub fn repulsor_data(&self) -> AllocVec<f32> {
+        self.repulsors.iter().flat_map(|r| [r.x, r.y]).collect()
+    }
+
+    pub fn toggle_predator(&mut self) {
+        self.predator_enabled = !self.predator_enabled;
+    }
+
+    pub fn predator_data(&self) -> AllocVec<f32> {
+        if self.predator_enabled {
+            let angle = self.predator.velocity.y.atan2(self.predator.velocity.x);
+            alloc::vec![self.predator.position.x, self.predator.position.y, angle]
+        } else {
+            AllocVec::new()
+        }
     }
 
     pub fn tick(&mut self, dt: f32) {
@@ -72,7 +121,25 @@ impl FlockingDemo {
             let np: AllocVec<_> = nearby.iter().map(|j| positions[*j]).collect();
             let nv: AllocVec<_> = nearby.iter().map(|j| velocities[*j]).collect();
 
-            let steering = flock(&self.agents[i], &np, &nv, &self.weights);
+            let mut steering = flock(&self.agents[i], &np, &nv, &self.weights);
+
+            // Attractor forces (seek toward each attractor)
+            for attr in &self.attractors {
+                let s = seek(&self.agents[i], *attr);
+                steering = steering.add(s.scale(0.5));
+            }
+            // Repulsor forces (flee from each repulsor)
+            for rep in &self.repulsors {
+                let s = flee(&self.agents[i], *rep);
+                steering = steering.add(s.scale(0.8));
+            }
+
+            // Evade predator
+            if self.predator_enabled {
+                let evade_force = evade(&self.agents[i], &self.predator);
+                steering = steering.add(evade_force.scale(1.5));
+            }
+
             self.agents[i] = apply_steering(&self.agents[i], &steering, dt);
 
             // Edge wrapping
@@ -87,6 +154,38 @@ impl FlockingDemo {
             }
             if self.agents[i].position.y > self.height {
                 self.agents[i].position.y = self.agents[i].position.y - self.height;
+            }
+        }
+
+        // Move predator toward nearest boid
+        if self.predator_enabled {
+            let mut nearest_dist = f32::MAX;
+            let mut nearest_idx = 0;
+            for (i, agent) in self.agents.iter().enumerate() {
+                let d = agent.position.distance(self.predator.position);
+                if d < nearest_dist {
+                    nearest_dist = d;
+                    nearest_idx = i;
+                }
+            }
+            if !self.agents.is_empty() {
+                let prey = &self.agents[nearest_idx];
+                let chase = pursue(&self.predator, prey);
+                self.predator = apply_steering(&self.predator, &chase, dt);
+            }
+
+            // Edge wrapping for predator
+            if self.predator.position.x < 0.0 {
+                self.predator.position.x += self.width;
+            }
+            if self.predator.position.x > self.width {
+                self.predator.position.x -= self.width;
+            }
+            if self.predator.position.y < 0.0 {
+                self.predator.position.y += self.height;
+            }
+            if self.predator.position.y > self.height {
+                self.predator.position.y -= self.height;
             }
         }
     }
@@ -269,6 +368,8 @@ impl SteeringDemo {
 pub struct ObstaclesDemo {
     agents: AllocVec<Agent<Vec2<f32>>>,
     circles: AllocVec<Circle<Vec2<f32>>>,
+    aabbs: AllocVec<Aabb<Vec2<f32>>>,
+    avoidance_forces: AllocVec<Vec2<f32>>,
     target: Vec2<f32>,
     width: f32,
     height: f32,
@@ -297,9 +398,12 @@ impl ObstaclesDemo {
             Circle { center: Vec2::new(600.0, 150.0), radius: 45.0 },
         ];
 
+        let avoidance_forces = AllocVec::from_iter(core::iter::repeat(Vec2::zero()).take(count));
         Self {
             agents,
             circles,
+            aabbs: AllocVec::new(),
+            avoidance_forces,
             target: Vec2::new(width * 0.5, height * 0.5),
             width,
             height,
@@ -321,11 +425,33 @@ impl ObstaclesDemo {
         self.circles.clear();
     }
 
+    pub fn add_aabb(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        self.aabbs.push(Aabb {
+            min: Vec2::new(x, y),
+            max: Vec2::new(x + w, y + h),
+        });
+    }
+
+    pub fn clear_aabbs(&mut self) {
+        self.aabbs.clear();
+    }
+
+    pub fn aabb_data(&self) -> AllocVec<f32> {
+        self.aabbs
+            .iter()
+            .flat_map(|a| [a.min.x, a.min.y, a.max.x, a.max.y])
+            .collect()
+    }
+
     pub fn tick(&mut self, dt: f32) {
         for i in 0..self.agents.len() {
             let seek_force = seek(&self.agents[i], self.target);
-            let avoid_force = avoid_circles(&self.agents[i], &self.circles, 100.0);
-            let combined = seek_force.scale(0.6).add(avoid_force.scale(2.0));
+            let avoid_circle_force = avoid_circles(&self.agents[i], &self.circles, 100.0);
+            let avoid_aabb_force = avoid_aabbs(&self.agents[i], &self.aabbs, 100.0);
+            let total_avoidance = avoid_circle_force.add(avoid_aabb_force);
+            self.avoidance_forces[i] = total_avoidance.linear;
+            let combined = seek_force.scale(0.6)
+                .add(total_avoidance.scale(2.0));
             self.agents[i] = apply_steering(&self.agents[i], &combined, dt);
 
             // Edge wrapping
@@ -362,6 +488,26 @@ impl ObstaclesDemo {
         self.circles
             .iter()
             .flat_map(|c| [c.center.x, c.center.y, c.radius])
+            .collect()
+    }
+
+    pub fn ray_data(&self) -> AllocVec<f32> {
+        let detection_length = 100.0_f32;
+        self.agents
+            .iter()
+            .flat_map(|a| {
+                let heading = a.heading();
+                let end = a.position.add(heading.scale(detection_length));
+                [a.position.x, a.position.y, end.x, end.y]
+            })
+            .collect()
+    }
+
+    pub fn avoidance_data(&self) -> AllocVec<f32> {
+        self.agents
+            .iter()
+            .zip(self.avoidance_forces.iter())
+            .flat_map(|(a, f)| [a.position.x, a.position.y, f.x, f.y])
             .collect()
     }
 }
@@ -563,6 +709,10 @@ impl FormationsDemo {
 
     pub fn set_radius(&mut self, r: f32) {
         self.formation_radius = r;
+    }
+
+    pub fn set_slowing_radius(&mut self, r: f32) {
+        self.slowing_radius = r;
     }
 
     pub fn tick(&mut self, dt: f32) {

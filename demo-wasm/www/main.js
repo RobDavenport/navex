@@ -182,6 +182,18 @@ function tickAndRenderFlocking(dt) {
     const demo = demos.flocking;
     demo.tick(dt);
 
+    // Draw attractors (green circles)
+    const attr = demo.attractor_data();
+    for (let i = 0; i < attr.length; i += 2) {
+        drawCircle(attr[i], attr[i + 1], 10, 'rgba(68, 255, 68, 0.3)', '#4f4');
+    }
+
+    // Draw repulsors (red circles)
+    const rep = demo.repulsor_data();
+    for (let i = 0; i < rep.length; i += 2) {
+        drawCircle(rep[i], rep[i + 1], 10, 'rgba(255, 68, 68, 0.3)', '#f44');
+    }
+
     const pos = demo.positions();
     const hdg = demo.headings();
     const count = hdg.length;
@@ -190,6 +202,12 @@ function tickAndRenderFlocking(dt) {
         const x = pos[i * 2];
         const y = pos[i * 2 + 1];
         drawBoid(x, y, hdg[i], 6, COL_BOID, COL_BOID_STROKE);
+    }
+
+    // Draw predator (larger red triangle)
+    const pred = demo.predator_data();
+    if (pred.length === 3) {
+        drawBoid(pred[0], pred[1], pred[2], 14, '#f44', '#c22');
     }
 }
 
@@ -265,17 +283,52 @@ function tickAndRenderObstacles(dt) {
     const pos = demo.positions();
     const hdg = demo.headings();
     const obs = demo.obstacle_data();
+    const aabbData = demo.aabb_data();
     const count = hdg.length;
 
-    // Draw obstacles
+    // Draw circle obstacles
     for (let i = 0; i < obs.length; i += 3) {
         drawCircle(obs[i], obs[i + 1], obs[i + 2], COL_OBSTACLE, COL_OBSTACLE_STROKE);
+    }
+
+    // Draw AABB obstacles
+    for (let i = 0; i < aabbData.length; i += 4) {
+        const minX = aabbData[i];
+        const minY = aabbData[i + 1];
+        const maxX = aabbData[i + 2];
+        const maxY = aabbData[i + 3];
+        ctx.fillStyle = 'rgba(255, 160, 60, 0.25)';
+        ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+        ctx.strokeStyle = '#fa4';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
 
     // Draw target
     // We need to know the target - let's draw a crosshair at last click
     if (demos._obstacleTarget) {
         drawTarget(demos._obstacleTarget[0], demos._obstacleTarget[1]);
+    }
+
+    // Draw detection rays (thin semi-transparent white lines)
+    const rays = demo.ray_data();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < rays.length; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(rays[i], rays[i + 1]);
+        ctx.lineTo(rays[i + 2], rays[i + 3]);
+        ctx.stroke();
+    }
+
+    // Draw avoidance forces (yellow arrows)
+    const avoid = demo.avoidance_data();
+    for (let i = 0; i < avoid.length; i += 4) {
+        const fx = avoid[i + 2];
+        const fy = avoid[i + 3];
+        if (Math.abs(fx) > 0.1 || Math.abs(fy) > 0.1) {
+            drawArrow(avoid[i], avoid[i + 1], fx * 0.5, fy * 0.5, '#ff0', 40);
+        }
     }
 
     // Draw agents
@@ -445,6 +498,11 @@ function setupEventHandlers() {
         });
     });
 
+    // Prevent context menu on canvas for right-click
+    canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
     // Canvas click
     canvas.addEventListener('click', (e) => {
         const rect = canvas.getBoundingClientRect();
@@ -452,6 +510,9 @@ function setupEventHandlers() {
         const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
         switch (activeTab) {
+            case 'flocking':
+                demos.flocking.add_attractor(x, y);
+                break;
             case 'steering':
                 demos.steering.set_target(x, y);
                 break;
@@ -479,6 +540,37 @@ function setupEventHandlers() {
                 demos._formationTarget = [x, y];
                 break;
         }
+    });
+
+    // Right-click handler
+    canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 2 && activeTab === 'obstacles' && e.shiftKey) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            const w = 40 + Math.random() * 40;
+            const h = 40 + Math.random() * 40;
+            demos.obstacles.add_aabb(x - w / 2, y - h / 2, w, h);
+        }
+        if (e.button === 2 && activeTab === 'flocking') {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            demos.flocking.add_repulsor(x, y);
+        }
+    });
+
+    // Predator toggle
+    document.getElementById('predator-btn').addEventListener('click', () => {
+        demos.flocking.toggle_predator();
+        const btn = document.getElementById('predator-btn');
+        btn.classList.toggle('active');
+        btn.textContent = btn.classList.contains('active') ? 'Predator ON' : 'Predator';
+    });
+
+    // Clear points button
+    document.getElementById('clear-points-btn').addEventListener('click', () => {
+        demos.flocking.clear_points();
     });
 
     // Flocking sliders
@@ -517,6 +609,19 @@ function setupEventHandlers() {
         demos.obstacles.clear_circles();
     });
 
+    // AABB buttons
+    document.getElementById('add-aabb-btn').addEventListener('click', () => {
+        const x = 100 + Math.random() * 600;
+        const y = 100 + Math.random() * 400;
+        const w = 40 + Math.random() * 40;
+        const h = 40 + Math.random() * 40;
+        demos.obstacles.add_aabb(x - w / 2, y - h / 2, w, h);
+    });
+
+    document.getElementById('clear-aabbs-btn').addEventListener('click', () => {
+        demos.obstacles.clear_aabbs();
+    });
+
     // Formation controls
     document.getElementById('pattern-select').addEventListener('change', (e) => {
         demos.formations.set_pattern(parseInt(e.target.value));
@@ -527,6 +632,13 @@ function setupEventHandlers() {
         const r = parseFloat(radiusSlider.value);
         document.getElementById('radius-val').textContent = r.toFixed(0);
         demos.formations.set_radius(r);
+    });
+
+    const slowingSlider = document.getElementById('slowing-radius');
+    slowingSlider.addEventListener('input', () => {
+        const r = parseFloat(slowingSlider.value);
+        document.getElementById('slowing-val').textContent = r.toFixed(0);
+        demos.formations.set_slowing_radius(r);
     });
 }
 
