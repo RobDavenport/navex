@@ -4,7 +4,7 @@ Composable steering behaviors, flocking, flow fields, and formations for games.
 
 `no_std` compatible | MIT / Apache-2.0
 
-**[Live Demo](demo-wasm/www/index.html)**
+**[Live Demo](https://robdavenport.github.io/navex/)**
 
 ## Overview
 
